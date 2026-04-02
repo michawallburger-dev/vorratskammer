@@ -350,14 +350,16 @@
 
   <!-- ═══════════════════════════════ SCANNER ═══════════════════════════════ -->
   <div id="scanner-view" class="view">
-    <video id="scanner-video" autoplay playsinline muted></video>
+    <div id="quagga-container" style="position:absolute;inset:0;overflow:hidden;background:#000;">
+      <!-- Quagga renders video+canvas here -->
+    </div>
     <div class="scanner-overlay">
       <div class="scanner-frame">
         <div class="corner-bl"></div>
         <div class="corner-br"></div>
         <div class="scan-line"></div>
       </div>
-      <div class="scanner-hint">Barcode in den Rahmen halten</div>
+      <div class="scanner-hint" id="scanner-hint">Barcode in den Rahmen halten</div>
     </div>
     <div class="scanner-controls">
       <div class="manual-barcode-row">
@@ -539,7 +541,7 @@
 <!-- ═══════════════════════════════ TOAST ═══════════════════════════════ -->
 <div class="toast" id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.18.6/zxing.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
 <script>
 // ═══════════════════ STATE ═══════════════════
@@ -548,13 +550,13 @@ let settings = JSON.parse(localStorage.getItem('vk_settings') || '{"warnDays":7}
 let currentFilter = 'all';
 let editingId = null;
 let isFrozen = false;
-let codeReader = null;
-let cameraStream = null;
-let scanInterval = null;
 let scanCanvas = null;
 let scanCtx = null;
 let currentView = 'home';
 let sortOrder = 'mhd';
+let quaggaRunning = false;
+let lastScannedCode = null;
+let lastScannedTime = 0;
 
 // ═══════════════════ UTILS ═══════════════════
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
@@ -867,118 +869,96 @@ async function lookupManualBarcode() {
 }
 
 // ═══════════════════ CAMERA / SCANNER ═══════════════════
-async function startCamera() {
-  const video = document.getElementById('scanner-video');
+function startCamera() {
+  if (quaggaRunning) return;
 
-  // Stop any existing stream first
-  stopCamera();
+  const hint = document.getElementById('scanner-hint');
+  if (hint) hint.textContent = 'Kamera wird gestartet…';
 
-  try {
-    // Request camera with environment (back camera) preference
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+  // Style the quagga container
+  const container = document.getElementById('quagga-container');
+  container.innerHTML = '';
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: container,
+      constraints: {
+        facingMode: 'environment',
+        width: { min: 640, ideal: 1280 },
+        height: { min: 480, ideal: 720 },
       },
-      audio: false
-    });
-
-    cameraStream = stream;
-    video.srcObject = stream;
-
-    // Safari needs this
-    video.setAttribute('autoplay', '');
-    video.setAttribute('playsinline', '');
-    video.setAttribute('muted', '');
-
-    await video.play();
-
-    // Setup canvas for frame capture
-    scanCanvas = document.createElement('canvas');
-    scanCtx = scanCanvas.getContext('2d');
-
-    // Try BarcodeDetector API first (native Safari iOS 16+)
-    if ('BarcodeDetector' in window) {
-      startBarcodeDetector(video);
-    } else if (typeof ZXing !== 'undefined') {
-      startZXingScanner(video);
-    } else {
-      showToast('Scanner nicht verfügbar – nutze manuelle Eingabe', '⚠️');
+    },
+    locator: {
+      patchSize: 'medium',
+      halfSample: true,
+    },
+    numOfWorkers: 0, // Important: 0 for Safari (no SharedArrayBuffer)
+    frequency: 10,
+    decoder: {
+      readers: [
+        'ean_reader',
+        'ean_8_reader',
+        'upc_reader',
+        'upc_e_reader',
+        'code_128_reader',
+        'code_39_reader',
+      ],
+      multiple: false,
+    },
+    locate: true,
+  }, function(err) {
+    if (err) {
+      console.error('Quagga init error:', err);
+      if (hint) hint.textContent = '❌ Kamera nicht verfügbar';
+      showToast('Kamera-Fehler: ' + (err.message || err), '❌');
+      return;
     }
 
-  } catch (err) {
-    console.error('Camera error:', err);
-    if (err.name === 'NotAllowedError') {
-      showToast('Kamera-Zugriff verweigert – bitte in Einstellungen erlauben', '❌');
-    } else {
-      showToast('Kamera nicht verfügbar', '❌');
+    // Make video/canvas fill the container properly
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
     }
-  }
-}
+    const canvas = container.querySelector('canvas');
+    if (canvas) {
+      canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+    }
 
-function startBarcodeDetector(video) {
-  const detector = new BarcodeDetector({
-    formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'data_matrix']
+    Quagga.start();
+    quaggaRunning = true;
+    if (hint) hint.textContent = 'Barcode in den Rahmen halten';
   });
 
-  let scanning = true;
+  // Debounce: only fire once per barcode, ignore duplicates within 2s
+  Quagga.onDetected(function(result) {
+    if (!result || !result.codeResult) return;
+    const code = result.codeResult.code;
+    const now = Date.now();
 
-  async function detect() {
-    if (!scanning || !cameraStream) return;
-    try {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) {
-          scanning = false;
-          const code = barcodes[0].rawValue;
-          await onBarcodeFound(code);
-          return;
-        }
-      }
-    } catch(e) {}
-    if (scanning) requestAnimationFrame(detect);
-  }
-
-  requestAnimationFrame(detect);
-
-  // Store stop function
-  codeReader = { reset: () => { scanning = false; } };
+    // Require 2 consecutive reads of same code OR 1.5s cooldown
+    if (code === lastScannedCode && now - lastScannedTime < 2000) {
+      // Same code seen again quickly → confirmed!
+      stopCamera();
+      onBarcodeFound(code);
+      lastScannedCode = null;
+    } else {
+      lastScannedCode = code;
+      lastScannedTime = now;
+    }
+  });
 }
 
-function startZXingScanner(video) {
-  try {
-    const reader = new ZXing.BrowserMultiFormatReader();
-    let scanning = true;
-
-    async function tick() {
-      if (!scanning || !cameraStream) return;
-      try {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          scanCanvas.width = video.videoWidth;
-          scanCanvas.height = video.videoHeight;
-          scanCtx.drawImage(video, 0, 0);
-          const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-          const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(scanCanvas);
-          const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-          try {
-            const result = reader.decodeBitmap(binaryBitmap);
-            if (result) {
-              scanning = false;
-              await onBarcodeFound(result.getText());
-              return;
-            }
-          } catch(e) {}
-        }
-      } catch(e) {}
-      if (scanning) setTimeout(tick, 200);
-    }
-
-    tick();
-    codeReader = { reset: () => { scanning = false; try { reader.reset(); } catch(e){} } };
-  } catch(e) {
-    showToast('Scanner-Fehler – nutze manuelle Eingabe', '⚠️');
+function stopCamera() {
+  if (quaggaRunning) {
+    try {
+      Quagga.offDetected();
+      Quagga.stop();
+    } catch(e) {}
+    quaggaRunning = false;
   }
+  lastScannedCode = null;
 }
 
 async function onBarcodeFound(code) {
@@ -986,24 +966,6 @@ async function onBarcodeFound(code) {
   showView('home');
   const data = await lookupBarcode(code);
   openAddModal(code, data);
-}
-
-function stopCamera() {
-  // Stop frame scanning
-  if (codeReader) {
-    try { codeReader.reset(); } catch(e) {}
-    codeReader = null;
-  }
-  // Stop camera stream tracks
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
-  // Clear video source
-  const video = document.getElementById('scanner-video');
-  if (video) {
-    video.srcObject = null;
-  }
 }
 
 // ═══════════════════ EXPORT / IMPORT ═══════════════════
