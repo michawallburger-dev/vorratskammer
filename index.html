@@ -169,9 +169,22 @@
 
   /* ── SCANNER VIEW ── */
   #scanner-view { background: #000; position: relative; }
-  #scanner-video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+
+  /* Quagga renders video + canvas inside here */
+  #quagga-container { position: absolute; inset: 0; z-index: 0; }
+  #quagga-container video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  #quagga-container canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; /* hide Quagga's own drawing canvas */
+  }
+
+  /* Overlay sits above Quagga */
   .scanner-overlay {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
     align-items: center; justify-content: center; pointer-events: none;
   }
   .scanner-frame {
@@ -179,28 +192,35 @@
   }
   .scanner-frame::before, .scanner-frame::after,
   .scanner-frame .corner-bl, .scanner-frame .corner-br {
-    content: ''; position: absolute; width: 28px; height: 28px; border-color: var(--accent); border-style: solid;
+    content: ''; position: absolute; width: 28px; height: 28px;
+    border-color: var(--accent); border-style: solid;
   }
   .scanner-frame::before { top: 0; left: 0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
-  .scanner-frame::after { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+  .scanner-frame::after  { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
   .scanner-frame .corner-bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
   .scanner-frame .corner-br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
 
   .scan-line {
-    position: absolute; left: 0; right: 0; height: 2px;
+    position: absolute; left: 4px; right: 4px; height: 2px;
     background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    top: 4px;
     animation: scanline 2s ease-in-out infinite;
   }
-  @keyframes scanline { 0% { top: 4px; } 50% { top: calc(100% - 6px); } 100% { top: 4px; } }
+  @keyframes scanline {
+    0%   { top: 4px; }
+    50%  { top: calc(100% - 6px); }
+    100% { top: 4px; }
+  }
 
   .scanner-hint {
-    color: rgba(255,255,255,0.7); font-size: 14px; margin-top: 24px; text-align: center;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    color: rgba(255,255,255,0.85); font-size: 14px; margin-top: 24px; text-align: center;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9);
   }
 
   .scanner-controls {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    padding: 20px 20px 40px; background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+    padding: 20px 20px 40px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, transparent 100%);
     pointer-events: all; display: flex; flex-direction: column; gap: 12px;
   }
   .manual-barcode-row { display: flex; gap: 8px; }
@@ -875,7 +895,6 @@ function startCamera() {
   const hint = document.getElementById('scanner-hint');
   if (hint) hint.textContent = 'Kamera wird gestartet…';
 
-  // Style the quagga container
   const container = document.getElementById('quagga-container');
   container.innerHTML = '';
 
@@ -885,17 +904,23 @@ function startCamera() {
       type: 'LiveStream',
       target: container,
       constraints: {
-        facingMode: 'environment',
-        width: { min: 640, ideal: 1280 },
-        height: { min: 480, ideal: 720 },
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      area: {
+        top:    '20%',
+        right:  '10%',
+        left:   '10%',
+        bottom: '20%',
       },
     },
     locator: {
-      patchSize: 'medium',
-      halfSample: true,
+      patchSize: 'large',
+      halfSample: false,
     },
-    numOfWorkers: 0, // Important: 0 for Safari (no SharedArrayBuffer)
-    frequency: 10,
+    numOfWorkers: 0,
+    frequency: 5,
     decoder: {
       readers: [
         'ean_reader',
@@ -903,7 +928,6 @@ function startCamera() {
         'upc_reader',
         'upc_e_reader',
         'code_128_reader',
-        'code_39_reader',
       ],
       multiple: false,
     },
@@ -911,58 +935,64 @@ function startCamera() {
   }, function(err) {
     if (err) {
       console.error('Quagga init error:', err);
-      if (hint) hint.textContent = '❌ Kamera nicht verfügbar';
-      showToast('Kamera-Fehler: ' + (err.message || err), '❌');
+      if (hint) hint.textContent = '❌ ' + (err.message || 'Kamera-Fehler');
+      showToast('Kamera-Fehler – bitte Zugriff erlauben', '❌');
       return;
     }
 
-    // Make video/canvas fill the container properly
-    const video = container.querySelector('video');
-    if (video) {
-      video.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
-    }
-    const canvas = container.querySelector('canvas');
-    if (canvas) {
-      canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
-    }
+    // Fix video/canvas sizing inside container
+    setTimeout(() => {
+      container.querySelectorAll('video, canvas').forEach(el => {
+        el.style.position = 'absolute';
+        el.style.inset = '0';
+        el.style.width = '100%';
+        el.style.height = '100%';
+        el.style.objectFit = 'cover';
+      });
+    }, 100);
 
     Quagga.start();
     quaggaRunning = true;
     if (hint) hint.textContent = 'Barcode in den Rahmen halten';
-  });
 
-  // Debounce: only fire once per barcode, ignore duplicates within 2s
-  Quagga.onDetected(function(result) {
-    if (!result || !result.codeResult) return;
-    const code = result.codeResult.code;
-    const now = Date.now();
+    // Register detection handler INSIDE init callback (important for Safari)
+    let cooldown = false;
+    Quagga.onDetected(function(result) {
+      if (cooldown || !quaggaRunning) return;
+      if (!result || !result.codeResult || !result.codeResult.code) return;
 
-    // Require 2 consecutive reads of same code OR 1.5s cooldown
-    if (code === lastScannedCode && now - lastScannedTime < 2000) {
-      // Same code seen again quickly → confirmed!
-      stopCamera();
-      onBarcodeFound(code);
-      lastScannedCode = null;
-    } else {
-      lastScannedCode = code;
-      lastScannedTime = now;
-    }
+      // Check detection confidence
+      const errors = result.codeResult.decodedCodes
+        .filter(c => c.error !== undefined)
+        .map(c => c.error);
+      const avgError = errors.length
+        ? errors.reduce((a, b) => a + b, 0) / errors.length
+        : 1;
+
+      // Only accept high-confidence reads (lower error = better)
+      if (avgError > 0.25) return;
+
+      cooldown = true;
+      const code = result.codeResult.code;
+      if (hint) hint.textContent = '✅ Erkannt: ' + code;
+
+      setTimeout(() => {
+        stopCamera();
+        onBarcodeFound(code);
+      }, 300);
+    });
   });
 }
 
 function stopCamera() {
   if (quaggaRunning) {
-    try {
-      Quagga.offDetected();
-      Quagga.stop();
-    } catch(e) {}
+    try { Quagga.stop(); } catch(e) {}
     quaggaRunning = false;
   }
   lastScannedCode = null;
 }
 
 async function onBarcodeFound(code) {
-  stopCamera();
   showView('home');
   const data = await lookupBarcode(code);
   openAddModal(code, data);
