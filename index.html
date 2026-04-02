@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vorratskammer">
+<meta name="theme-color" content="#1a1a2e">
+<title>Vorratskammer</title>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f0f1a;
+    --bg2: #1a1a2e;
+    --bg3: #252540;
+    --card: #1e1e35;
+    --card-border: rgba(255,255,255,0.07);
+    --accent: #e8c547;
+    --accent2: #f0a500;
+    --text: #f0ede8;
+    --text-muted: #8888aa;
+    --red: #e05555;
+    --orange: #e07a30;
+    --green: #4caf7d;
+    --frozen: #5eb8f5;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  /* ── APP SHELL ── */
+  #app {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── VIEWS ── */
+  .view { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .view.active { display: flex; }
+
+  /* ── HEADER ── */
+  .header {
+    padding: 52px 20px 16px;
+    background: linear-gradient(180deg, var(--bg2) 0%, transparent 100%);
+    flex-shrink: 0;
+  }
+  .header-row { display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--accent); letter-spacing: -0.5px; }
+  .header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    display: flex;
+    background: var(--bg2);
+    border-top: 1px solid var(--card-border);
+    padding: 10px 0 28px;
+    flex-shrink: 0;
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    background: none; border: none; color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif; font-size: 11px; cursor: pointer;
+    transition: color 0.2s; padding: 6px 0;
+  }
+  .nav-btn svg { width: 22px; height: 22px; }
+  .nav-btn.active { color: var(--accent); }
+
+  /* ── SCROLL AREA ── */
+  .scroll-area { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  /* ── DASHBOARD ── */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: var(--radius); padding: 16px; position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: -20px; right: -20px;
+    width: 70px; height: 70px; border-radius: 50%;
+    background: currentColor; opacity: 0.07;
+  }
+  .stat-card .num { font-family: 'DM Serif Display', serif; font-size: 36px; line-height: 1; }
+  .stat-card .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .stat-card.warn { color: var(--orange); }
+  .stat-card.danger { color: var(--red); }
+  .stat-card.frozen { color: var(--frozen); }
+  .stat-card.ok { color: var(--green); }
+
+  .section-title {
+    font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--text-muted); margin: 20px 0 10px;
+  }
+
+  /* ── PRODUCT CARD ── */
+  .product-card {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 12px;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .product-card:active { transform: scale(0.98); }
+
+  .product-emoji { font-size: 32px; flex-shrink: 0; width: 48px; text-align: center; }
+  .product-img {
+    width: 48px; height: 48px; border-radius: 8px; object-fit: contain;
+    background: var(--bg3); flex-shrink: 0;
+  }
+  .product-info { flex: 1; min-width: 0; }
+  .product-name { font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .product-brand { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+  .product-meta { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+
+  .badge {
+    font-size: 11px; font-weight: 500; padding: 3px 8px;
+    border-radius: 20px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .badge-mhd { background: rgba(232,197,71,0.15); color: var(--accent); }
+  .badge-mhd.warn { background: rgba(224,122,48,0.15); color: var(--orange); }
+  .badge-mhd.danger { background: rgba(224,85,85,0.15); color: var(--red); }
+  .badge-frozen { background: rgba(94,184,245,0.15); color: var(--frozen); }
+  .badge-qty { background: rgba(255,255,255,0.07); color: var(--text-muted); }
+
+  .product-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  .icon-btn {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.2s;
+  }
+  .icon-btn.edit { background: var(--bg3); color: var(--text-muted); }
+  .icon-btn.delete { background: rgba(224,85,85,0.1); color: var(--red); }
+  .icon-btn:active { opacity: 0.7; }
+
+  /* ── SEARCH ── */
+  .search-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg3); border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px;
+  }
+  .search-bar input {
+    flex: 1; background: none; border: none; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none;
+  }
+  .search-bar input::placeholder { color: var(--text-muted); }
+
+  /* ── FILTER CHIPS ── */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0; padding: 6px 14px; border-radius: 20px; font-size: 13px;
+    border: 1px solid var(--card-border); background: var(--card); color: var(--text-muted);
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .chip.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+
+  /* ── SCANNER VIEW ── */
+  #scanner-view { background: #000; position: relative; }
+  #scanner-video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+  .scanner-overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; pointer-events: none;
+  }
+  .scanner-frame {
+    width: 260px; height: 160px; position: relative;
+  }
+  .scanner-frame::before, .scanner-frame::after,
+  .scanner-frame .corner-bl, .scanner-frame .corner-br {
+    content: ''; position: absolute; width: 28px; height: 28px; border-color: var(--accent); border-style: solid;
+  }
+  .scanner-frame::before { top: 0; left: 0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+  .scanner-frame::after { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+  .scanner-frame .corner-bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+  .scanner-frame .corner-br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+  .scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scanline 2s ease-in-out infinite;
+  }
+  @keyframes scanline { 0% { top: 4px; } 50% { top: calc(100% - 6px); } 100% { top: 4px; } }
+
+  .scanner-hint {
+    color: rgba(255,255,255,0.7); font-size: 14px; margin-top: 24px; text-align: center;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+
+  .scanner-controls {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 20px 20px 40px; background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+    pointer-events: all; display: flex; flex-direction: column; gap: 12px;
+  }
+  .manual-barcode-row { display: flex; gap: 8px; }
+  .manual-barcode-row input {
+    flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: var(--radius-sm); padding: 12px 14px; color: #fff;
+    font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none;
+  }
+  .manual-barcode-row input::placeholder { color: rgba(255,255,255,0.4); }
+  .btn {
+    padding: 14px 20px; border-radius: var(--radius-sm); border: none;
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+  .btn-danger { background: var(--red); color: #fff; }
+
+  /* ── MODAL ── */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+    align-items: flex-end; justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--bg2); border-radius: 24px 24px 0 0;
+    width: 100%; max-height: 90dvh; overflow-y: auto;
+    padding: 8px 20px 40px; -webkit-overflow-scrolling: touch;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--bg3); margin: 12px auto 20px; }
+  .modal h2 { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 20px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm); padding: 12px 14px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+  .form-group select option { background: var(--bg2); }
+
+  .product-found-banner {
+    background: rgba(76,175,125,0.15); border: 1px solid rgba(76,175,125,0.3);
+    border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px; font-size: 14px;
+  }
+  .product-found-banner .found-img {
+    width: 44px; height: 44px; object-fit: contain; border-radius: 8px;
+    background: var(--bg3); flex-shrink: 0;
+  }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--card-border); }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 15px; }
+  .toggle {
+    width: 48px; height: 28px; border-radius: 14px; border: none;
+    background: var(--bg3); position: relative; cursor: pointer; transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    transition: transform 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .toggle.on::after { transform: translateX(20px); }
+
+  /* ── EMPTY STATE ── */
+  .empty-state { text-align: center; padding: 60px 20px; }
+  .empty-state .icon { font-size: 56px; margin-bottom: 16px; }
+  .empty-state h3 { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ── SETTINGS ── */
+  .settings-section { margin-bottom: 24px; }
+  .settings-row {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+
+  /* ── LOADING SPINNER ── */
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--bg3); border: 1px solid var(--card-border); border-radius: 20px;
+    padding: 10px 18px; font-size: 14px; font-weight: 500;
+    z-index: 200; opacity: 0; transition: all 0.3s; white-space: nowrap;
+    display: flex; align-items: center; gap: 8px; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ═══════════════════════════════ DASHBOARD ═══════════════════════════════ -->
+  <div id="home-view" class="view active">
+    <div class="header">
+      <div class="header-row">
+        <div>
+          <h1>🫙 Vorratskammer</h1>
+          <p id="subtitle">Deine Vorräte im Überblick</p>
+        </div>
+        <button class="icon-btn edit" style="width:40px;height:40px;border-radius:12px;" onclick="openSort()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="scroll-area">
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card ok"><div class="num" id="stat-total">0</div><div class="label">Produkte gesamt</div></div>
+        <div class="stat-card frozen"><div class="num" id="stat-frozen">0</div><div class="label">Eingefroren</div></div>
+        <div class="stat-card warn"><div class="num" id="stat-soon">0</div><div class="label">Läuft bald ab</div></div>
+        <div class="stat-card danger"><div class="num" id="stat-expired">0</div><div class="label">Abgelaufen</div></div>
+      </div>
+
+      <div class="search-bar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8888aa" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="search-input" type="search" placeholder="Suchen…" oninput="renderList()">
+      </div>
+
+      <div class="filter-row" id="filter-row">
+        <div class="chip active" data-filter="all" onclick="setFilter('all', this)">Alle</div>
+        <div class="chip" data-filter="expired" onclick="setFilter('expired', this)">⚠️ Abgelaufen</div>
+        <div class="chip" data-filter="soon" onclick="setFilter('soon', this)">🕐 Bald</div>
+        <div class="chip" data-filter="frozen" onclick="setFilter('frozen', this)">❄️ Eingefroren</div>
+      </div>
+
+      <div id="product-list"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ SCANNER ═══════════════════════════════ -->
+  <div id="scanner-view" class="view">
+    <video id="scanner-video" autoplay playsinline muted></video>
+    <div class="scanner-overlay">
+      <div class="scanner-frame">
+        <div class="corner-bl"></div>
+        <div class="corner-br"></div>
+        <div class="scan-line"></div>
+      </div>
+      <div class="scanner-hint">Barcode in den Rahmen halten</div>
+    </div>
+    <div class="scanner-controls">
+      <div class="manual-barcode-row">
+        <input id="manual-barcode" type="number" inputmode="numeric" placeholder="Barcode manuell eingeben…">
+        <button class="btn btn-primary" style="padding:12px 16px;" onclick="lookupManualBarcode()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="5 12 12 5 19 12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ LISTE ═══════════════════════════════ -->
+  <div id="list-view" class="view">
+    <div class="header">
+      <h1>📋 Alle Produkte</h1>
+    </div>
+    <div class="scroll-area" id="list-scroll">
+      <div id="list-content"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ EINSTELLUNGEN ═══════════════════════════════ -->
+  <div id="settings-view" class="view">
+    <div class="header"><h1>⚙️ Einstellungen</h1></div>
+    <div class="scroll-area">
+      <p class="section-title">Warnungen</p>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="toggle-row" style="padding:14px;">
+            <span class="toggle-label">MHD-Warnung (Tage vorher)</span>
+            <input type="number" id="warn-days" value="7" min="1" max="60"
+              style="width:60px;text-align:center;background:var(--bg3);border:1px solid var(--card-border);border-radius:8px;padding:6px;color:var(--text);font-size:15px;outline:none;"
+              onchange="saveSetting('warnDays', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <p class="section-title">Daten</p>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="toggle-row" style="padding:14px;" onclick="exportData()">
+            <span class="toggle-label">📤 Daten exportieren (JSON)</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8888aa" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="toggle-row" style="padding:14px;" onclick="document.getElementById('import-file').click()">
+            <span class="toggle-label">📥 Daten importieren</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8888aa" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="toggle-row" style="padding:14px;" onclick="confirmClearAll()">
+            <span class="toggle-label" style="color:var(--red)">🗑️ Alle Daten löschen</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+        </div>
+      </div>
+
+      <p class="section-title">Info</p>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="toggle-row" style="padding:14px;">
+            <span class="toggle-label" style="color:var(--text-muted);font-size:13px;">Vorratskammer v1.0 · Open Food Facts API</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ NAV ═══════════════════════════════ -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-home" onclick="showView('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Übersicht
+    </button>
+    <button class="nav-btn" id="nav-scanner" onclick="showView('scanner')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="8" x2="8" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/></svg>
+      Scanner
+    </button>
+    <button class="nav-btn" id="nav-list" onclick="showView('list')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Liste
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      Einstellungen
+    </button>
+  </nav>
+</div>
+
+<!-- ═══════════════════════════════ ADD/EDIT MODAL ═══════════════════════════════ -->
+<div class="modal-backdrop" id="add-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 id="modal-title">Produkt hinzufügen</h2>
+
+    <div id="product-found-banner" class="product-found-banner" style="display:none">
+      <img id="found-img" class="found-img" src="" alt="">
+      <div>
+        <div id="found-name" style="font-weight:600;font-size:14px;"></div>
+        <div id="found-brand" style="font-size:12px;color:var(--text-muted);margin-top:2px;"></div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Barcode</label>
+      <input id="f-barcode" type="number" inputmode="numeric" placeholder="z.B. 4000521002459" readonly style="opacity:0.6">
+    </div>
+    <div class="form-group">
+      <label>Produktname *</label>
+      <input id="f-name" type="text" placeholder="z.B. Haferflocken">
+    </div>
+    <div class="form-group">
+      <label>Marke</label>
+      <input id="f-brand" type="text" placeholder="optional">
+    </div>
+    <div class="form-group">
+      <label>Kategorie</label>
+      <select id="f-category">
+        <option value="">— wählen —</option>
+        <option>🥩 Fleisch & Fisch</option>
+        <option>🥦 Gemüse</option>
+        <option>🍎 Obst</option>
+        <option>🥛 Milchprodukte</option>
+        <option>🌾 Getreide & Nudeln</option>
+        <option>🥫 Konserven</option>
+        <option>🍝 Fertiggerichte</option>
+        <option>🧂 Gewürze & Saucen</option>
+        <option>🍫 Süßes & Snacks</option>
+        <option>🥤 Getränke</option>
+        <option>🍞 Backwaren</option>
+        <option>🫘 Hülsenfrüchte</option>
+        <option>🧊 Tiefkühl</option>
+        <option>📦 Sonstiges</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>MHD</label>
+      <input id="f-mhd" type="date">
+    </div>
+    <div class="form-group">
+      <label>Menge / Einheit</label>
+      <div style="display:flex;gap:8px;">
+        <input id="f-qty" type="number" placeholder="1" min="0" step="0.1" style="width:80px;flex-shrink:0;">
+        <input id="f-unit" type="text" placeholder="Stück / kg / ml…">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Lagerort</label>
+      <select id="f-location">
+        <option value="">— wählen —</option>
+        <option>Kühlschrank</option>
+        <option>Tiefkühler</option>
+        <option>Vorratskammer</option>
+        <option>Küche</option>
+        <option>Keller</option>
+      </select>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">❄️ Eingefroren</span>
+      <button class="toggle" id="f-frozen-toggle" onclick="toggleFrozen()"></button>
+    </div>
+    <div id="frozen-date-group" class="form-group" style="display:none;margin-top:12px;">
+      <label>Eingefroren am</label>
+      <input id="f-frozen-date" type="date">
+    </div>
+
+    <div class="form-group" style="margin-top:16px;">
+      <label>Notiz</label>
+      <textarea id="f-note" rows="2" placeholder="optional…" style="resize:none;"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-primary" style="flex:2" onclick="saveProduct()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TOAST ═══════════════════════════════ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════ ZXING BARCODE LIBRARY ═══════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.18.6/zxing.min.js"></script>
+
+<script>
+// ═══════════════════ STATE ═══════════════════
+let products = JSON.parse(localStorage.getItem('vk_products') || '[]');
+let settings = JSON.parse(localStorage.getItem('vk_settings') || '{"warnDays":7}');
+let currentFilter = 'all';
+let editingId = null;
+let isFrozen = false;
+let codeReader = null;
+let cameraStream = null;
+let currentView = 'home';
+let sortOrder = 'mhd';
+
+// ═══════════════════ UTILS ═══════════════════
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function save() { localStorage.setItem('vk_products', JSON.stringify(products)); }
+function saveSetting(k, v) { settings[k] = v; localStorage.setItem('vk_settings', JSON.stringify(settings)); }
+function getSetting(k, def) { return settings[k] !== undefined ? settings[k] : def; }
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr) - new Date();
+  return Math.ceil(diff / 86400000);
+}
+
+function mhdStatus(dateStr) {
+  const d = daysUntil(dateStr);
+  if (d === null) return null;
+  const warn = parseInt(getSetting('warnDays', 7));
+  if (d < 0) return 'danger';
+  if (d <= warn) return 'warn';
+  return 'ok';
+}
+
+function formatMHD(dateStr) {
+  if (!dateStr) return null;
+  const d = daysUntil(dateStr);
+  const date = new Date(dateStr).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
+  if (d < 0) return `Abgelaufen (${date})`;
+  if (d === 0) return `Heute (${date})`;
+  if (d === 1) return `Morgen (${date})`;
+  if (d <= 7) return `in ${d} Tagen (${date})`;
+  return date;
+}
+
+function getCategoryEmoji(cat) {
+  if (!cat) return '📦';
+  const emojis = { '🥩':1,'🥦':1,'🍎':1,'🥛':1,'🌾':1,'🥫':1,'🍝':1,'🧂':1,'🍫':1,'🥤':1,'🍞':1,'🫘':1,'🧊':1,'📦':1 };
+  const first = cat.split(' ')[0];
+  return emojis[first] ? first : '📦';
+}
+
+function showToast(msg, icon = '✅') {
+  const t = document.getElementById('toast');
+  t.innerHTML = icon + ' ' + msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ═══════════════════ VIEW SWITCHING ═══════════════════
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(v + '-view').classList.add('active');
+  document.getElementById('nav-' + v).classList.add('active');
+
+  if (v !== 'scanner') stopCamera();
+  if (v === 'scanner') startCamera();
+  if (v === 'home') renderList();
+  if (v === 'list') renderFullList();
+
+  currentView = v;
+}
+
+// ═══════════════════ RENDERING ═══════════════════
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+function getFilteredProducts() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const warnDays = parseInt(getSetting('warnDays', 7));
+  return products.filter(p => {
+    const matchQ = !q || p.name.toLowerCase().includes(q) || (p.brand||'').toLowerCase().includes(q);
+    if (!matchQ) return false;
+    if (currentFilter === 'all') return true;
+    if (currentFilter === 'frozen') return p.frozen;
+    if (currentFilter === 'expired') { const d = daysUntil(p.mhd); return d !== null && d < 0; }
+    if (currentFilter === 'soon') { const d = daysUntil(p.mhd); return d !== null && d >= 0 && d <= warnDays; }
+    return true;
+  });
+}
+
+function sortProducts(list) {
+  return [...list].sort((a, b) => {
+    if (sortOrder === 'mhd') {
+      const da = a.mhd ? new Date(a.mhd) : new Date('9999-12-31');
+      const db = b.mhd ? new Date(b.mhd) : new Date('9999-12-31');
+      return da - db;
+    }
+    if (sortOrder === 'name') return a.name.localeCompare(b.name);
+    if (sortOrder === 'added') return new Date(b.added) - new Date(a.added);
+    return 0;
+  });
+}
+
+function renderProductCard(p) {
+  const status = mhdStatus(p.mhd);
+  const mhdText = formatMHD(p.mhd);
+  const emoji = getCategoryEmoji(p.category);
+
+  let mhdBadge = '';
+  if (mhdText) {
+    mhdBadge = `<span class="badge badge-mhd ${status !== 'ok' ? status : ''}">${status === 'danger' ? '⚠️' : status === 'warn' ? '🕐' : '📅'} ${mhdText}</span>`;
+  }
+  const frozenBadge = p.frozen ? `<span class="badge badge-frozen">❄️ ${p.frozenDate ? new Date(p.frozenDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}) : 'Eingefroren'}</span>` : '';
+  const qtyBadge = (p.qty || p.unit) ? `<span class="badge badge-qty">${p.qty ? p.qty+' ' : ''}${p.unit||'Stk.'}</span>` : '';
+
+  const imgEl = p.img
+    ? `<img class="product-img" src="${p.img}" alt="" onerror="this.style.display='none'">`
+    : `<div class="product-emoji">${emoji}</div>`;
+
+  return `<div class="product-card" id="card-${p.id}">
+    ${imgEl}
+    <div class="product-info">
+      <div class="product-name">${p.name}</div>
+      ${p.brand ? `<div class="product-brand">${p.brand}</div>` : ''}
+      ${p.location ? `<div class="product-brand" style="color:var(--text-muted)">📍 ${p.location}</div>` : ''}
+      <div class="product-meta">${mhdBadge}${frozenBadge}${qtyBadge}</div>
+    </div>
+    <div class="product-actions">
+      <button class="icon-btn edit" onclick="openEdit('${p.id}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="icon-btn delete" onclick="deleteProduct('${p.id}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderList() {
+  const list = sortProducts(getFilteredProducts());
+  const el = document.getElementById('product-list');
+
+  // Update stats
+  const warnDays = parseInt(getSetting('warnDays', 7));
+  document.getElementById('stat-total').textContent = products.length;
+  document.getElementById('stat-frozen').textContent = products.filter(p => p.frozen).length;
+  document.getElementById('stat-soon').textContent = products.filter(p => { const d = daysUntil(p.mhd); return d !== null && d >= 0 && d <= warnDays; }).length;
+  document.getElementById('stat-expired').textContent = products.filter(p => { const d = daysUntil(p.mhd); return d !== null && d < 0; }).length;
+
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">🫙</div><h3>Noch leer hier!</h3><p>Scanne deinen ersten Barcode oder füge ein Produkt manuell hinzu.</p></div>`;
+    return;
+  }
+  el.innerHTML = list.map(renderProductCard).join('');
+}
+
+function renderFullList() {
+  const list = sortProducts(products);
+  const el = document.getElementById('list-content');
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">📋</div><h3>Keine Produkte</h3><p>Füge Produkte über den Scanner hinzu.</p></div>`;
+    return;
+  }
+  el.innerHTML = list.map(renderProductCard).join('');
+}
+
+function openSort() {
+  const orders = ['mhd','name','added'];
+  const labels = {'mhd':'Nach MHD','name':'Nach Name','added':'Zuletzt hinzugefügt'};
+  sortOrder = orders[(orders.indexOf(sortOrder) + 1) % orders.length];
+  showToast('Sortiert: ' + labels[sortOrder], '🔀');
+  renderList();
+}
+
+// ═══════════════════ MODAL ═══════════════════
+function openAddModal(barcode, productData) {
+  editingId = null;
+  isFrozen = false;
+  document.getElementById('modal-title').textContent = 'Produkt hinzufügen';
+  document.getElementById('f-frozen-toggle').classList.remove('on');
+  document.getElementById('frozen-date-group').style.display = 'none';
+  document.getElementById('product-found-banner').style.display = 'none';
+
+  // defaults
+  document.getElementById('f-barcode').value = barcode || '';
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-brand').value = '';
+  document.getElementById('f-category').value = '';
+  document.getElementById('f-mhd').value = '';
+  document.getElementById('f-qty').value = '';
+  document.getElementById('f-unit').value = '';
+  document.getElementById('f-location').value = '';
+  document.getElementById('f-frozen-date').value = '';
+  document.getElementById('f-note').value = '';
+
+  if (productData) {
+    document.getElementById('f-name').value = productData.name || '';
+    document.getElementById('f-brand').value = productData.brand || '';
+    if (productData.img) {
+      document.getElementById('found-img').src = productData.img;
+      document.getElementById('found-name').textContent = productData.name;
+      document.getElementById('found-brand').textContent = productData.brand || '';
+      document.getElementById('product-found-banner').style.display = 'flex';
+    }
+  }
+
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function openEdit(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  editingId = id;
+  isFrozen = !!p.frozen;
+
+  document.getElementById('modal-title').textContent = 'Produkt bearbeiten';
+  document.getElementById('f-barcode').value = p.barcode || '';
+  document.getElementById('f-name').value = p.name || '';
+  document.getElementById('f-brand').value = p.brand || '';
+  document.getElementById('f-category').value = p.category || '';
+  document.getElementById('f-mhd').value = p.mhd || '';
+  document.getElementById('f-qty').value = p.qty || '';
+  document.getElementById('f-unit').value = p.unit || '';
+  document.getElementById('f-location').value = p.location || '';
+  document.getElementById('f-frozen-date').value = p.frozenDate || '';
+  document.getElementById('f-note').value = p.note || '';
+  document.getElementById('f-frozen-toggle').classList.toggle('on', isFrozen);
+  document.getElementById('frozen-date-group').style.display = isFrozen ? 'block' : 'none';
+  document.getElementById('product-found-banner').style.display = 'none';
+
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('add-modal').classList.remove('open'); }
+
+function toggleFrozen() {
+  isFrozen = !isFrozen;
+  document.getElementById('f-frozen-toggle').classList.toggle('on', isFrozen);
+  document.getElementById('frozen-date-group').style.display = isFrozen ? 'block' : 'none';
+  if (isFrozen && !document.getElementById('f-frozen-date').value) {
+    document.getElementById('f-frozen-date').value = new Date().toISOString().split('T')[0];
+  }
+}
+
+function saveProduct() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { showToast('Bitte Namen eingeben', '⚠️'); return; }
+
+  const data = {
+    id: editingId || uid(),
+    barcode: document.getElementById('f-barcode').value || '',
+    name,
+    brand: document.getElementById('f-brand').value.trim(),
+    category: document.getElementById('f-category').value,
+    mhd: document.getElementById('f-mhd').value,
+    qty: document.getElementById('f-qty').value,
+    unit: document.getElementById('f-unit').value.trim(),
+    location: document.getElementById('f-location').value,
+    frozen: isFrozen,
+    frozenDate: isFrozen ? (document.getElementById('f-frozen-date').value || new Date().toISOString().split('T')[0]) : null,
+    note: document.getElementById('f-note').value.trim(),
+    img: editingId ? (products.find(p => p.id === editingId)?.img || null) : (document.getElementById('found-img').src || null),
+    added: editingId ? (products.find(p => p.id === editingId)?.added || new Date().toISOString()) : new Date().toISOString(),
+  };
+
+  if (editingId) {
+    const idx = products.findIndex(p => p.id === editingId);
+    products[idx] = data;
+    showToast('Produkt aktualisiert');
+  } else {
+    products.push(data);
+    showToast('Produkt gespeichert');
+  }
+
+  save();
+  closeModal();
+  if (currentView === 'home') renderList();
+  if (currentView === 'list') renderFullList();
+}
+
+function deleteProduct(id) {
+  if (!confirm('Produkt löschen?')) return;
+  products = products.filter(p => p.id !== id);
+  save();
+  renderList();
+  if (currentView === 'list') renderFullList();
+  showToast('Gelöscht', '🗑️');
+}
+
+// ═══════════════════ BARCODE LOOKUP ═══════════════════
+async function lookupBarcode(code) {
+  showToast('Suche Produkt…', '<span class="spinner"></span>');
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+    const json = await res.json();
+    if (json.status === 1) {
+      const p = json.product;
+      return {
+        name: p.product_name || p.product_name_de || '',
+        brand: p.brands || '',
+        img: p.image_small_url || p.image_url || null,
+        barcode: code,
+      };
+    }
+  } catch(e) {}
+  return { barcode: code, name: '', brand: '', img: null };
+}
+
+async function lookupManualBarcode() {
+  const val = document.getElementById('manual-barcode').value.trim();
+  if (!val) return;
+  const data = await lookupBarcode(val);
+  stopCamera();
+  showView('home');
+  openAddModal(val, data);
+}
+
+// ═══════════════════ CAMERA / SCANNER ═══════════════════
+async function startCamera() {
+  if (typeof ZXing === 'undefined') {
+    showToast('Scanner-Bibliothek lädt…', '⏳');
+    // fallback: load from CDN alternative
+    return;
+  }
+  try {
+    codeReader = new ZXing.BrowserMultiFormatReader();
+    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+    const backCamera = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+    const deviceId = backCamera ? backCamera.deviceId : undefined;
+
+    codeReader.decodeFromVideoDevice(deviceId, 'scanner-video', async (result, err) => {
+      if (result) {
+        const code = result.getText();
+        stopCamera();
+        showView('home');
+        const data = await lookupBarcode(code);
+        openAddModal(code, data);
+      }
+    });
+  } catch(e) {
+    showToast('Kamera nicht verfügbar', '❌');
+  }
+}
+
+function stopCamera() {
+  if (codeReader) {
+    try { codeReader.reset(); } catch(e) {}
+    codeReader = null;
+  }
+}
+
+// ═══════════════════ EXPORT / IMPORT ═══════════════════
+function exportData() {
+  const blob = new Blob([JSON.stringify({ products, settings, exported: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `vorratskammer-${new Date().toISOString().split('T')[0]}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Exportiert!');
+}
+
+function importData(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data.products) {
+        products = data.products;
+        if (data.settings) settings = data.settings;
+        save();
+        renderList();
+        showToast(`${products.length} Produkte importiert`);
+      }
+    } catch { showToast('Fehler beim Import', '❌'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function confirmClearAll() {
+  if (confirm('Wirklich ALLE Daten löschen? Das kann nicht rückgängig gemacht werden.')) {
+    products = [];
+    save();
+    renderList();
+    showToast('Alle Daten gelöscht', '🗑️');
+  }
+}
+
+// ═══════════════════ INIT ═══════════════════
+document.getElementById('warn-days').value = getSetting('warnDays', 7);
+
+// Close modal on backdrop click
+document.getElementById('add-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+renderList();
+
+// Service Worker for PWA
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'vk-v1';
+    self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/']))));
+    self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+  `;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+}
+</script>
+</body>
+</html>
