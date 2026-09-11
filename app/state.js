@@ -6,5 +6,7 @@ export const state = {
   sortOrder: 'mhd',
   editingId: null,
   isFrozen: false,
-  quaggaRunning: false
+  quaggaRunning: false,
+  locationOrder: [],
+  collapsedSections: {}
 };

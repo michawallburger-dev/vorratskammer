@@ -1,30 +1,14 @@
-import { state } from '../state.js';
-import { escapeHTML, daysUntil } from '../utils.js';
+// Small shared UI helpers (toast notifications).
 
-export function renderList() {
-  const el = document.getElementById('product-list');
+let toastTimer;
 
-  if (!state.products.length) {
-    el.innerHTML = `<div class="empty-state">Noch leer</div>`;
-    return;
-  }
+export function showToast(message, icon = '✅') {
+  const el = document.getElementById('toast');
+  if (!el) return;
 
-  el.innerHTML = state.products.map(renderCard).join('');
-}
+  el.innerHTML = `${icon} ${message}`;
+  el.classList.add('show');
 
-function renderCard(p) {
-  return `
-    <div class="product-card">
-      <div class="product-name">${escapeHTML(p.name)}</div>
-      <div>${formatMHD(p.mhd)}</div>
-    </div>
-  `;
-}
-
-function formatMHD(dateStr) {
-  const d = daysUntil(dateStr);
-  if (d === null) return '';
-  if (d < 0) return '⚠️ Abgelaufen';
-  if (d === 0) return 'Heute';
-  return `in ${d} Tagen`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
