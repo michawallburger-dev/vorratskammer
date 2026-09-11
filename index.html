@@ -65,11 +65,14 @@
   /* ── BOTTOM NAV ── */
   .bottom-nav {
     display: flex;
+    align-items: center;
     background: var(--bg2);
     border-top: 1px solid var(--card-border);
     padding: 10px 0 28px;
     flex-shrink: 0;
+    position: relative;
   }
+  /* Left and right halves, FAB sits in the middle gap */
   .nav-btn {
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
     background: none; border: none; color: var(--text-muted);
@@ -78,9 +81,38 @@
   }
   .nav-btn svg { width: 22px; height: 22px; }
   .nav-btn.active { color: var(--accent); }
+  /* Empty space in the middle for FAB */
+  .nav-spacer { flex: 1; }
+
+  /* ── FAB ── */
+  .fab {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: -26px; /* lifts above nav bar */
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 4px solid var(--bg);
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(232, 197, 71, 0.45);
+    transition: transform 0.15s, box-shadow 0.15s;
+    z-index: 20;
+  }
+  .fab:active {
+    transform: translateX(-50%) scale(0.92);
+    box-shadow: 0 2px 10px rgba(232, 197, 71, 0.3);
+  }
+  .fab svg { width: 26px; height: 26px; }
 
   /* ── SCROLL AREA ── */
-  .scroll-area { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; }
+  /* Extra bottom padding so FAB never covers last list item */
+  .scroll-area { flex: 1; overflow-y: auto; padding: 0 16px 90px; -webkit-overflow-scrolling: touch; }
   .scroll-area::-webkit-scrollbar { display: none; }
 
   /* ── DASHBOARD ── */
@@ -453,18 +485,26 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Übersicht
     </button>
-    <button class="nav-btn" id="nav-scanner" onclick="showView('scanner')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="8" x2="8" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/></svg>
-      Scanner
-    </button>
     <button class="nav-btn" id="nav-list" onclick="showView('list')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Liste
     </button>
+
+    <!-- FAB slot: same flex:1 as nav-btns, FAB positioned absolute above -->
+    <div class="nav-spacer"></div>
+    <button class="fab" onclick="showView('scanner')" aria-label="Scanner öffnen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/>
+        <rect x="8" y="8" width="8" height="8" rx="1"/>
+      </svg>
+    </button>
+
     <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
       Einstellungen
     </button>
+    <!-- Fourth phantom slot to balance the layout -->
+    <div style="flex:1"></div>
   </nav>
 </div>
 
@@ -562,188 +602,31 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script type="module" src="./app/main.js"></script>
 
-<script>
-// ═══════════════════ STATE ═══════════════════
-let products = JSON.parse(localStorage.getItem('vk_products') || '[]');
-let settings = JSON.parse(localStorage.getItem('vk_settings') || '{"warnDays":7}');
-let currentFilter = 'all';
-let editingId = null;
-let isFrozen = false;
-let scanCanvas = null;
-let scanCtx = null;
-let currentView = 'home';
-let sortOrder = 'mhd';
-let quaggaRunning = false;
-let lastScannedCode = null;
-let lastScannedTime = 0;
-
-// ═══════════════════ UTILS ═══════════════════
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
-function save() { localStorage.setItem('vk_products', JSON.stringify(products)); }
-function saveSetting(k, v) { settings[k] = v; localStorage.setItem('vk_settings', JSON.stringify(settings)); }
-function getSetting(k, def) { return settings[k] !== undefined ? settings[k] : def; }
-
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const diff = new Date(dateStr) - new Date();
-  return Math.ceil(diff / 86400000);
+<style>
+.location-section {
+  margin-bottom: 16px;
 }
 
-function mhdStatus(dateStr) {
-  const d = daysUntil(dateStr);
-  if (d === null) return null;
-  const warn = parseInt(getSetting('warnDays', 7));
-  if (d < 0) return 'danger';
-  if (d <= warn) return 'warn';
-  return 'ok';
+.location-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg3);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 6px;
 }
 
-function formatMHD(dateStr) {
-  if (!dateStr) return null;
-  const d = daysUntil(dateStr);
-  const date = new Date(dateStr).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
-  if (d < 0) return `Abgelaufen (${date})`;
-  if (d === 0) return `Heute (${date})`;
-  if (d === 1) return `Morgen (${date})`;
-  if (d <= 7) return `in ${d} Tagen (${date})`;
-  return date;
+.location-body {
+  padding-left: 4px;
 }
+</style>
 
-function getCategoryEmoji(cat) {
-  if (!cat) return '📦';
-  const emojis = { '🥩':1,'🥦':1,'🍎':1,'🥛':1,'🌾':1,'🥫':1,'🍝':1,'🧂':1,'🍫':1,'🥤':1,'🍞':1,'🫘':1,'🧊':1,'📦':1 };
-  const first = cat.split(' ')[0];
-  return emojis[first] ? first : '📦';
-}
-
-function showToast(msg, icon = '✅') {
-  const t = document.getElementById('toast');
-  t.innerHTML = icon + ' ' + msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
-}
-
-// ═══════════════════ VIEW SWITCHING ═══════════════════
-function showView(v) {
-  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById(v + '-view').classList.add('active');
-  document.getElementById('nav-' + v).classList.add('active');
-
-  if (v !== 'scanner') stopCamera();
-  if (v === 'scanner') startCamera();
-  if (v === 'home') renderList();
-  if (v === 'list') renderFullList();
-
-  currentView = v;
-}
-
-// ═══════════════════ RENDERING ═══════════════════
-function setFilter(f, el) {
-  currentFilter = f;
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  renderList();
-}
-
-function getFilteredProducts() {
-  const q = document.getElementById('search-input').value.toLowerCase();
-  const warnDays = parseInt(getSetting('warnDays', 7));
-  return products.filter(p => {
-    const matchQ = !q || p.name.toLowerCase().includes(q) || (p.brand||'').toLowerCase().includes(q);
-    if (!matchQ) return false;
-    if (currentFilter === 'all') return true;
-    if (currentFilter === 'frozen') return p.frozen;
-    if (currentFilter === 'expired') { const d = daysUntil(p.mhd); return d !== null && d < 0; }
-    if (currentFilter === 'soon') { const d = daysUntil(p.mhd); return d !== null && d >= 0 && d <= warnDays; }
-    return true;
-  });
-}
-
-function sortProducts(list) {
-  return [...list].sort((a, b) => {
-    if (sortOrder === 'mhd') {
-      const da = a.mhd ? new Date(a.mhd) : new Date('9999-12-31');
-      const db = b.mhd ? new Date(b.mhd) : new Date('9999-12-31');
-      return da - db;
-    }
-    if (sortOrder === 'name') return a.name.localeCompare(b.name);
-    if (sortOrder === 'added') return new Date(b.added) - new Date(a.added);
-    return 0;
-  });
-}
-
-function renderProductCard(p) {
-  const status = mhdStatus(p.mhd);
-  const mhdText = formatMHD(p.mhd);
-  const emoji = getCategoryEmoji(p.category);
-
-  let mhdBadge = '';
-  if (mhdText) {
-    mhdBadge = `<span class="badge badge-mhd ${status !== 'ok' ? status : ''}">${status === 'danger' ? '⚠️' : status === 'warn' ? '🕐' : '📅'} ${mhdText}</span>`;
-  }
-  const frozenBadge = p.frozen ? `<span class="badge badge-frozen">❄️ ${p.frozenDate ? new Date(p.frozenDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}) : 'Eingefroren'}</span>` : '';
-  const qtyBadge = (p.qty || p.unit) ? `<span class="badge badge-qty">${p.qty ? p.qty+' ' : ''}${p.unit||'Stk.'}</span>` : '';
-
-  const imgEl = p.img
-    ? `<img class="product-img" src="${p.img}" alt="" onerror="this.style.display='none'">`
-    : `<div class="product-emoji">${emoji}</div>`;
-
-  return `<div class="product-card" id="card-${p.id}">
-    ${imgEl}
-    <div class="product-info">
-      <div class="product-name">${p.name}</div>
-      ${p.brand ? `<div class="product-brand">${p.brand}</div>` : ''}
-      ${p.location ? `<div class="product-brand" style="color:var(--text-muted)">📍 ${p.location}</div>` : ''}
-      <div class="product-meta">${mhdBadge}${frozenBadge}${qtyBadge}</div>
-    </div>
-    <div class="product-actions">
-      <button class="icon-btn edit" onclick="openEdit('${p.id}')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      </button>
-      <button class="icon-btn delete" onclick="deleteProduct('${p.id}')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-      </button>
-    </div>
-  </div>`;
-}
-
-function renderList() {
-  const list = sortProducts(getFilteredProducts());
-  const el = document.getElementById('product-list');
-
-  // Update stats
-  const warnDays = parseInt(getSetting('warnDays', 7));
-  document.getElementById('stat-total').textContent = products.length;
-  document.getElementById('stat-frozen').textContent = products.filter(p => p.frozen).length;
-  document.getElementById('stat-soon').textContent = products.filter(p => { const d = daysUntil(p.mhd); return d !== null && d >= 0 && d <= warnDays; }).length;
-  document.getElementById('stat-expired').textContent = products.filter(p => { const d = daysUntil(p.mhd); return d !== null && d < 0; }).length;
-
-  if (!list.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">🫙</div><h3>Noch leer hier!</h3><p>Scanne deinen ersten Barcode oder füge ein Produkt manuell hinzu.</p></div>`;
-    return;
-  }
-  el.innerHTML = list.map(renderProductCard).join('');
-}
-
-function renderFullList() {
-  const list = sortProducts(products);
-  const el = document.getElementById('list-content');
-  if (!list.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">📋</div><h3>Keine Produkte</h3><p>Füge Produkte über den Scanner hinzu.</p></div>`;
-    return;
-  }
-  el.innerHTML = list.map(renderProductCard).join('');
-}
-
-function openSort() {
-  const orders = ['mhd','name','added'];
-  const labels = {'mhd':'Nach MHD','name':'Nach Name','added':'Zuletzt hinzugefügt'};
-  sortOrder = orders[(orders.indexOf(sortOrder) + 1) % orders.length];
-  showToast('Sortiert: ' + labels[sortOrder], '🔀');
-  renderList();
-}
 
 // ═══════════════════ MODAL ═══════════════════
 function openAddModal(barcode, productData) {
