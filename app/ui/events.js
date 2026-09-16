@@ -1,10 +1,10 @@
 import { state } from '../state.js';
-import { renderList } from './render.js';
+import { renderList, renderLocationOrder } from './render.js';
 import { openAddModal, openEditModal, closeModal, toggleFrozen, saveProductFromForm, deleteProduct } from './modal.js';
 import { showToast } from './utils.js';
 import { startScanner, stopScanner } from '../scanner.js';
 import { lookupBarcode } from '../api.js';
-import { saveSetting, saveProducts } from '../storage.js';
+import { saveSetting, saveProducts, saveLocationState } from '../storage.js';
 
 export function initEvents() {
   wireNav();
@@ -130,6 +130,21 @@ function wireSettings() {
   });
   document.getElementById('import-file')?.addEventListener('change', importData);
   document.getElementById('clear-all-btn')?.addEventListener('click', clearAll);
+
+  document.getElementById('location-order-list')?.addEventListener('click', e => {
+    const upBtn = e.target.closest('[data-move-up]');
+    const downBtn = e.target.closest('[data-move-down]');
+    if (!upBtn && !downBtn) return;
+
+    const i = parseInt((upBtn || downBtn).dataset.moveUp ?? (upBtn || downBtn).dataset.moveDown, 10);
+    const j = upBtn ? i - 1 : i + 1;
+    if (j < 0 || j >= state.locationOrder.length) return;
+
+    [state.locationOrder[i], state.locationOrder[j]] = [state.locationOrder[j], state.locationOrder[i]];
+    saveLocationState();
+    renderLocationOrder();
+    renderList();
+  });
 }
 
 function exportData() {

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { daysUntil, mhdStatus, escapeHTML } from '../utils.js';
+import { daysUntil, mhdStatus, mhdProgress, escapeHTML } from '../utils.js';
 import { saveLocationState } from '../storage.js';
 
 export function renderList() {
@@ -24,10 +24,37 @@ export function renderList() {
   keys.forEach(k => {
     if (!state.locationOrder.includes(k)) state.locationOrder.push(k);
   });
+  // Drop locations from the order that no longer have any products,
+  // so the reorder list in Settings doesn't accumulate stale entries.
+  state.locationOrder = state.locationOrder.filter(k => keys.includes(k));
 
   saveLocationState();
 
   el.innerHTML = keys.map(k => renderSection(k, groups[k])).join('');
+  renderLocationOrder();
+}
+
+export function renderLocationOrder() {
+  const el = document.getElementById('location-order-list');
+  if (!el) return;
+
+  if (!state.locationOrder.length) {
+    el.innerHTML = `
+      <div class="toggle-row" style="padding:14px;">
+        <span class="toggle-label" style="color:var(--text-muted);font-size:13px;">Noch keine Lagerorte vorhanden</span>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = state.locationOrder.map((name, i) => `
+    <div class="toggle-row" style="padding:10px 14px;">
+      <span class="toggle-label">${escapeHTML(name)}</span>
+      <div style="display:flex;gap:6px;">
+        <button class="icon-btn edit" data-move-up="${i}" ${i === 0 ? 'disabled style="opacity:0.3"' : ''}>⬆️</button>
+        <button class="icon-btn edit" data-move-down="${i}" ${i === state.locationOrder.length - 1 ? 'disabled style="opacity:0.3"' : ''}>⬇️</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 function updateStats() {
@@ -104,6 +131,7 @@ function renderCard(p) {
   const warnDays = parseInt(state.settings.warnDays || 7);
   const status = mhdStatus(p.mhd, warnDays);
   const emoji = (p.category || '').trim().split(' ')[0] || '📦';
+  const progress = mhdProgress(p.added, p.mhd);
 
   return `
     <div class="product-card">
@@ -113,6 +141,11 @@ function renderCard(p) {
       <div class="product-info">
         <div class="product-name">${escapeHTML(p.name)}</div>
         ${p.brand ? `<div class="product-brand">${escapeHTML(p.brand)}</div>` : ''}
+        ${progress !== null ? `
+          <div class="mhd-bar">
+            <div class="mhd-bar-fill ${progressClass(progress)}" style="width:${progress}%"></div>
+          </div>
+        ` : ''}
         <div class="product-meta">
           <span class="badge badge-mhd${status === 'ok' ? '' : ' ' + status}">${formatMHD(p.mhd)}</span>
           ${p.frozen ? `<span class="badge badge-frozen">❄️ Gefroren</span>` : ''}
@@ -125,6 +158,12 @@ function renderCard(p) {
       </div>
     </div>
   `;
+}
+
+function progressClass(pct) {
+  if (pct < 20) return 'danger';
+  if (pct <= 50) return 'warn';
+  return 'good';
 }
 
 function formatMHD(dateStr) {

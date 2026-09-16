@@ -21,6 +21,33 @@ export function mhdStatus(dateStr, warnDays = 7) {
   return 'ok';
 }
 
+// Percentage of shelf life remaining (100 = just added, 0 = at/past MHD), or
+// null if there's no MHD to measure against. Uses the product's "added" date
+// as the purchase date; if that's missing, assumes a 30-day shelf life
+// counting back from the MHD instead.
+export function mhdProgress(addedISO, mhdStr) {
+  if (!mhdStr) return null;
+
+  const today = startOfDay(new Date());
+  const mhd = startOfDay(new Date(mhdStr));
+
+  let start = addedISO ? startOfDay(new Date(addedISO)) : null;
+  if (!start || start >= mhd) {
+    start = new Date(mhd.getTime() - 30 * 86400000);
+  }
+
+  const total = mhd - start;
+  const remaining = mhd - today;
+  const pct = Math.round((remaining / total) * 100);
+
+  return Math.max(0, Math.min(100, pct));
+}
+
+function startOfDay(d) {
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export function escapeHTML(str = '') {
   return str.replace(/[&<>"']/g, m => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
